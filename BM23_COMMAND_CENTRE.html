@@ -1,0 +1,878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BM23 ◆ COMMAND CENTRE</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --cyan:#00f0ff;--mag:#ff00a0;--amb:#ffb000;--grn:#00ff88;--red:#ff2040;
+  --bg:#03040f;--bg2:#060818;--panel:rgba(0,20,40,0.72);
+  --border:rgba(0,240,255,0.25);--border2:rgba(0,240,255,0.12);
+  --text:#c8e8ff;--dim:#4a7090;
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
+  font-family:'Courier New',Courier,monospace;color:var(--text);}
+#bgCanvas{position:fixed;inset:0;z-index:0;}
+#orbCanvas{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:1;pointer-events:none;}
+.ui{position:fixed;inset:0;z-index:2;display:grid;
+  grid-template-rows:48px 1fr 96px 56px;
+  grid-template-columns:260px 1fr 260px;
+  gap:8px;padding:8px;}
+
+/* ── header ── */
+header{grid-column:1/4;display:flex;align-items:center;
+  background:var(--panel);border:1px solid var(--border);
+  padding:0 16px;gap:16px;position:relative;overflow:hidden;}
+header::before{content:'';position:absolute;inset:0;
+  background:linear-gradient(90deg,rgba(0,240,255,0.08),transparent,rgba(255,0,160,0.06));
+  pointer-events:none;}
+.logo{font-size:18px;font-weight:700;letter-spacing:4px;
+  color:var(--cyan);text-shadow:0 0 18px var(--cyan);}
+.logo span{color:var(--mag);}
+.hdr-mid{flex:1;text-align:center;font-size:10px;letter-spacing:3px;color:var(--dim);}
+.hdr-right{display:flex;align-items:center;gap:20px;font-size:11px;}
+.status-dot{width:8px;height:8px;border-radius:50%;display:inline-block;
+  animation:pulse 2s infinite;}
+.dot-on{background:var(--grn);box-shadow:0 0 8px var(--grn);}
+.dot-warn{background:var(--amb);box-shadow:0 0 8px var(--amb);}
+.dot-off{background:var(--red);box-shadow:0 0 8px var(--red);animation:none;}
+#clock{font-size:13px;color:var(--cyan);letter-spacing:2px;
+  text-shadow:0 0 10px var(--cyan);}
+.scan-line{position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent);
+  animation:scanH 3s linear infinite;}
+
+/* ── left panel ── */
+.panel{background:var(--panel);border:1px solid var(--border);
+  padding:10px;display:flex;flex-direction:column;gap:6px;
+  position:relative;overflow:hidden;}
+.panel::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--cyan),transparent);}
+.panel-title{font-size:9px;letter-spacing:3px;color:var(--cyan);
+  padding-bottom:6px;border-bottom:1px solid var(--border2);
+  text-shadow:0 0 8px var(--cyan);}
+.corner{position:absolute;width:12px;height:12px;border-color:var(--cyan);}
+.corner-tl{top:3px;left:3px;border-top:1px solid;border-left:1px solid;}
+.corner-tr{top:3px;right:3px;border-top:1px solid;border-right:1px solid;}
+.corner-bl{bottom:3px;left:3px;border-bottom:1px solid;border-left:1px solid;}
+.corner-br{bottom:3px;right:3px;border-bottom:1px solid;border-right:1px solid;}
+
+/* LLM rows */
+.llm-row{display:flex;align-items:center;gap:8px;padding:5px 4px;
+  font-size:10px;border-bottom:1px solid var(--border2);cursor:pointer;
+  transition:background 0.2s;}
+.llm-row:hover{background:rgba(0,240,255,0.06);}
+.llm-name{flex:1;color:var(--text);}
+.llm-load{font-size:8px;color:var(--dim);}
+.llm-badge{font-size:8px;padding:1px 5px;border-radius:2px;letter-spacing:1px;}
+.badge-on{background:rgba(0,255,136,0.15);color:var(--grn);
+  border:1px solid rgba(0,255,136,0.3);}
+.badge-off{background:rgba(255,32,64,0.15);color:var(--red);
+  border:1px solid rgba(255,32,64,0.3);}
+.badge-busy{background:rgba(255,176,0,0.15);color:var(--amb);
+  border:1px solid rgba(255,176,0,0.3);}
+
+/* ── center ── */
+.center-cell{position:relative;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:8px;}
+.orb-wrap{position:relative;display:flex;align-items:center;
+  justify-content:center;}
+.orb-rings{position:absolute;pointer-events:none;}
+.jarvis-label{font-size:24px;font-weight:700;letter-spacing:8px;
+  color:var(--cyan);text-shadow:0 0 30px var(--cyan),0 0 60px var(--cyan);
+  position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  white-space:nowrap;}
+.voice-line{display:flex;align-items:center;gap:6px;font-size:10px;
+  color:var(--dim);letter-spacing:2px;min-height:20px;}
+#voiceText{color:var(--cyan);max-width:400px;text-align:center;
+  font-size:11px;letter-spacing:1px;line-height:1.5;}
+
+/* ── right panel: LIVE FEED ── */
+#liveFeed{flex:1;overflow-y:auto;font-size:9px;
+  display:flex;flex-direction:column;gap:3px;}
+#liveFeed::-webkit-scrollbar{width:3px;}
+#liveFeed::-webkit-scrollbar-track{background:transparent;}
+#liveFeed::-webkit-scrollbar-thumb{background:var(--border);}
+.feed-item{padding:4px 6px;border-left:2px solid var(--border2);
+  animation:fadeIn 0.4s ease;}
+.feed-item.hit{border-color:var(--grn);}
+.feed-item.warn{border-color:var(--amb);}
+.feed-item.err{border-color:var(--red);}
+.feed-ts{color:var(--dim);font-size:8px;}
+.feed-text{color:var(--text);}
+.feed-count{float:right;color:var(--grn);}
+
+/* ── agents row ── */
+.agents-row{grid-column:1/4;display:flex;gap:8px;align-items:stretch;}
+.agent-card{flex:1;background:var(--panel);border:1px solid var(--border2);
+  padding:8px 12px;display:flex;flex-direction:column;gap:4px;
+  cursor:pointer;transition:border-color 0.2s,background 0.2s;
+  position:relative;overflow:hidden;}
+.agent-card:hover{border-color:var(--cyan);background:rgba(0,240,255,0.06);}
+.agent-card.active{border-color:var(--grn);}
+.agent-card.active::before{content:'';position:absolute;top:0;left:0;right:0;
+  height:2px;background:var(--grn);}
+.agent-name{font-size:10px;letter-spacing:2px;color:var(--cyan);}
+.agent-status{font-size:8px;color:var(--dim);}
+.agent-metric{font-size:11px;font-weight:700;color:var(--text);}
+
+/* ── TALK button row ── */
+.talk-row{grid-column:1/4;display:flex;align-items:center;
+  justify-content:center;gap:20px;}
+#talkBtn{background:rgba(0,240,255,0.08);border:1px solid var(--cyan);
+  color:var(--cyan);font-family:inherit;font-size:12px;letter-spacing:4px;
+  padding:0 40px;height:40px;cursor:pointer;position:relative;
+  text-shadow:0 0 10px var(--cyan);
+  transition:all 0.2s;clip-path:polygon(8px 0,100% 0,calc(100% - 8px) 100%,0 100%);}
+#talkBtn:hover{background:rgba(0,240,255,0.18);
+  box-shadow:0 0 20px rgba(0,240,255,0.4);}
+#talkBtn.listening{background:rgba(255,0,160,0.15);border-color:var(--mag);
+  color:var(--mag);text-shadow:0 0 10px var(--mag);animation:talkPulse 1s infinite;}
+.voice-bar{display:flex;gap:2px;align-items:flex-end;height:24px;}
+.voice-bar span{width:3px;background:var(--cyan);border-radius:1px;
+  min-height:3px;transition:height 0.1s;}
+#voiceStatus{font-size:9px;color:var(--dim);letter-spacing:2px;}
+.voice-panel{display:flex;align-items:center;gap:8px;padding:4px 12px;
+  background:var(--panel);border:1px solid var(--border2);}
+select.voice-sel{background:transparent;border:none;color:var(--cyan);
+  font-family:inherit;font-size:9px;cursor:pointer;outline:none;}
+select.voice-sel option{background:#0a1020;color:var(--text);}
+
+/* ── waveform canvas ── */
+#waveCanvas{position:fixed;bottom:112px;left:50%;transform:translateX(-50%);
+  z-index:3;pointer-events:none;opacity:0;transition:opacity 0.3s;}
+#waveCanvas.visible{opacity:1;}
+
+/* ── response overlay ── */
+#responseBox{position:fixed;top:50%;left:50%;transform:translate(-50%,-40%);
+  z-index:10;max-width:600px;width:90%;
+  background:rgba(3,4,15,0.94);border:1px solid var(--cyan);
+  padding:24px 28px;display:none;animation:fadeIn 0.3s ease;}
+#responseBox.show{display:block;}
+#responseBox h3{color:var(--cyan);font-size:11px;letter-spacing:3px;
+  margin-bottom:12px;text-shadow:0 0 10px var(--cyan);}
+#responseContent{color:var(--text);font-size:12px;line-height:1.7;
+  max-height:200px;overflow-y:auto;}
+#responseClose{position:absolute;top:8px;right:12px;cursor:pointer;
+  color:var(--dim);font-size:16px;}
+#responseClose:hover{color:var(--red);}
+
+/* ── server connect badge ── */
+#serverBadge{position:fixed;top:57px;right:12px;z-index:5;
+  font-size:8px;letter-spacing:2px;padding:3px 8px;
+  background:rgba(0,0,0,0.7);border:1px solid var(--border2);}
+
+/* ── animations ── */
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+@keyframes scanH{0%{transform:scaleX(0);transform-origin:left}
+  50%{transform:scaleX(1);transform-origin:left}
+  51%{transform:scaleX(1);transform-origin:right}
+  100%{transform:scaleX(0);transform-origin:right}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes talkPulse{0%,100%{box-shadow:0 0 10px rgba(255,0,160,0.4)}
+  50%{box-shadow:0 0 30px rgba(255,0,160,0.8)}}
+@keyframes orbSpin{to{transform:rotate(360deg)}}
+@keyframes ring1{to{transform:rotate(360deg)}}
+@keyframes ring2{to{transform:rotate(-360deg)}}
+
+/* scrollbar global */
+::-webkit-scrollbar{width:3px;height:3px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--border);}
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+<canvas id="orbCanvas" width="300" height="300"></canvas>
+<canvas id="waveCanvas" width="400" height="40"></canvas>
+
+<div id="responseBox">
+  <span id="responseClose">✕</span>
+  <h3>◆ JARVIS RESPONSE</h3>
+  <div id="responseContent"></div>
+</div>
+
+<div id="serverBadge">⊙ LOCAL API: <span id="apiStatus">OFFLINE</span></div>
+
+<div class="ui">
+  <!-- HEADER -->
+  <header>
+    <div class="logo">BM23<span>◆</span></div>
+    <div class="hdr-mid">COMMAND CENTRE · NEURAL INTELLIGENCE ARRAY · v3.0</div>
+    <div class="hdr-right">
+      <span><span class="status-dot dot-on" id="siftDot"></span> SIFT</span>
+      <span><span class="status-dot dot-warn" id="tgDot"></span> TG-INGEST</span>
+      <span><span class="status-dot dot-off" id="apDot"></span> API</span>
+      <span id="clock">00:00:00</span>
+    </div>
+    <div class="scan-line"></div>
+  </header>
+
+  <!-- LEFT: LLM STATUS -->
+  <div class="panel">
+    <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div><div class="corner corner-br"></div>
+    <div class="panel-title">◆ NEURAL NETWORKS</div>
+    <div id="llmList"></div>
+    <div style="margin-top:auto;padding-top:8px;border-top:1px solid var(--border2);">
+      <div class="panel-title" style="margin-bottom:4px;">◆ VOICE</div>
+      <select class="voice-sel" id="voiceSel" style="width:100%;margin-bottom:4px;"></select>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;" id="voiceList"></div>
+    </div>
+  </div>
+
+  <!-- CENTER -->
+  <div class="center-cell">
+    <div class="orb-wrap">
+      <canvas id="ringCanvas" width="260" height="260"
+        style="position:absolute;pointer-events:none;z-index:1;"></canvas>
+    </div>
+    <div class="voice-line">
+      <span>◉</span>
+      <span id="voiceText">SYSTEMS ONLINE · AWAITING COMMAND</span>
+    </div>
+  </div>
+
+  <!-- RIGHT: LIVE FEED -->
+  <div class="panel">
+    <div class="corner corner-tl"></div><div class="corner corner-tr"></div>
+    <div class="corner corner-bl"></div><div class="corner corner-br"></div>
+    <div class="panel-title">◆ LIVE FEED
+      <span style="float:right;color:var(--grn)" id="feedCount">0 EVENTS</span>
+    </div>
+    <div id="liveFeed"></div>
+    <div style="margin-top:auto;padding-top:6px;border-top:1px solid var(--border2);
+      font-size:8px;color:var(--dim);display:flex;justify-content:space-between;">
+      <span>COMBOS: <span id="totalCombos" style="color:var(--grn)">0</span></span>
+      <span>HITS: <span id="totalHits" style="color:var(--grn)">0</span></span>
+      <span>QUEUED: <span id="queuedCount" style="color:var(--amb)">0</span></span>
+    </div>
+  </div>
+
+  <!-- AGENT CARDS -->
+  <div class="agents-row">
+    <div class="agent-card active" id="card-sift">
+      <div class="agent-name">SIFT</div>
+      <div class="agent-status" id="sift-status">EMAIL PROCESSOR</div>
+      <div class="agent-metric" id="sift-metric">—</div>
+    </div>
+    <div class="agent-card" id="card-tg">
+      <div class="agent-name">TG-INGEST</div>
+      <div class="agent-status" id="tg-status">FILES-TAB POLLER</div>
+      <div class="agent-metric" id="tg-metric">—</div>
+    </div>
+    <div class="agent-card" id="card-hermes">
+      <div class="agent-name">HERMES</div>
+      <div class="agent-status" id="hermes-status">HANDOFF ENGINE</div>
+      <div class="agent-metric" id="hermes-metric">—</div>
+    </div>
+    <div class="agent-card" id="card-local">
+      <div class="agent-name">LOCAL-AI</div>
+      <div class="agent-status" id="local-status">llama.cpp RUNTIME</div>
+      <div class="agent-metric" id="local-metric">—</div>
+    </div>
+    <div class="agent-card" id="card-forge">
+      <div class="agent-name">GUI-FORGE</div>
+      <div class="agent-status" id="forge-status">INTERFACE BUILDER</div>
+      <div class="agent-metric" id="forge-metric">—</div>
+    </div>
+    <div class="agent-card" id="card-sys">
+      <div class="agent-name">SYSTEM</div>
+      <div class="agent-status">HOST MACHINE</div>
+      <div class="agent-metric" id="sys-metric">—</div>
+    </div>
+  </div>
+
+  <!-- TALK ROW -->
+  <div class="talk-row">
+    <div class="voice-panel">
+      <div class="voice-bar" id="voiceBar">
+        <span style="height:4px"></span><span style="height:8px"></span>
+        <span style="height:6px"></span><span style="height:12px"></span>
+        <span style="height:5px"></span><span style="height:9px"></span>
+        <span style="height:4px"></span><span style="height:7px"></span>
+      </div>
+    </div>
+    <button id="talkBtn" onclick="toggleVoice()">◉ TALK TO JARVIS</button>
+    <div>
+      <div id="voiceStatus" style="text-align:center">PUSH TO TALK</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════
+// BM23 COMMAND CENTRE — v3.0
+// ══════════════════════════════════════════════════════════
+
+const API = 'http://localhost:5521';  // bm23_api_server.py
+let apiOnline = false;
+let listeningActive = false;
+let recognition = null;
+let synth = window.speechSynthesis;
+let voices = [];
+let selectedVoiceIdx = 0;
+let feedEvents = [];
+let agentState = {};
+
+// ── Background hex grid canvas ──────────────────────────
+(function hexBg() {
+  const c = document.getElementById('bgCanvas');
+  const x = c.getContext('2d');
+  function resize() { c.width = innerWidth; c.height = innerHeight; }
+  resize(); addEventListener('resize', resize);
+  const HEX = 38, SQ3 = Math.sqrt(3);
+  let t = 0;
+  function drawHex(cx, cy, r, alpha) {
+    x.beginPath();
+    for (let i = 0; i < 6; i++) {
+      const a = (Math.PI / 3) * i - Math.PI / 6;
+      const px = cx + r * Math.cos(a), py = cy + r * Math.sin(a);
+      i === 0 ? x.moveTo(px, py) : x.lineTo(px, py);
+    }
+    x.closePath();
+    x.strokeStyle = `rgba(0,240,255,${alpha})`;
+    x.stroke();
+  }
+  function loop() {
+    x.clearRect(0, 0, c.width, c.height);
+    x.lineWidth = 0.5;
+    const cols = Math.ceil(c.width / (HEX * SQ3)) + 2;
+    const rows = Math.ceil(c.height / (HEX * 1.5)) + 2;
+    for (let r = 0; r < rows; r++) {
+      for (let col = 0; col < cols; col++) {
+        const ox = (r % 2) * HEX * SQ3 / 2;
+        const cx = col * HEX * SQ3 + ox - HEX * SQ3;
+        const cy = r * HEX * 1.5 - HEX;
+        const dx = cx - c.width / 2, dy = cy - c.height / 2;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const maxD = Math.sqrt(c.width * c.width + c.height * c.height) / 2;
+        const wave = Math.sin(dist * 0.012 - t * 1.2) * 0.5 + 0.5;
+        const base = 0.04 + 0.06 * (1 - dist / maxD);
+        drawHex(cx, cy, HEX * 0.95, base + wave * 0.06);
+      }
+    }
+    // Particle field
+    if (!hexBg._ps) {
+      hexBg._ps = Array.from({length: 60}, () => ({
+        x: Math.random() * innerWidth, y: Math.random() * innerHeight,
+        vx: (Math.random() - .5) * .4, vy: (Math.random() - .5) * .4,
+        r: .8 + Math.random() * 1.4
+      }));
+    }
+    const ps = hexBg._ps;
+    for (let i = 0; i < ps.length; i++) {
+      ps[i].x += ps[i].vx; ps[i].y += ps[i].vy;
+      if (ps[i].x < 0 || ps[i].x > c.width) ps[i].vx *= -1;
+      if (ps[i].y < 0 || ps[i].y > c.height) ps[i].vy *= -1;
+      for (let j = i + 1; j < ps.length; j++) {
+        const dx = ps[i].x - ps[j].x, dy = ps[i].y - ps[j].y;
+        const d = Math.sqrt(dx * dx + dy * dy);
+        if (d < 120) {
+          x.strokeStyle = `rgba(0,240,255,${0.3 * (1 - d / 120)})`;
+          x.lineWidth = 0.4;
+          x.beginPath(); x.moveTo(ps[i].x, ps[i].y);
+          x.lineTo(ps[j].x, ps[j].y); x.stroke();
+        }
+      }
+      x.fillStyle = 'rgba(0,240,255,0.6)';
+      x.beginPath(); x.arc(ps[i].x, ps[i].y, ps[i].r, 0, Math.PI * 2); x.fill();
+    }
+    t += 0.016;
+    requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+// ── Central orb + ring canvas ──────────────────────────
+(function orbAnim() {
+  const oc = document.getElementById('orbCanvas');
+  const ox = oc.getContext('2d');
+  const rc = document.getElementById('ringCanvas');
+  const rx = rc.getContext('2d');
+  let t = 0;
+  const W = 300, CX = W / 2, CY = W / 2;
+  const RW = 260, RCX = RW / 2, RCY = RW / 2;
+
+  function drawOrb() {
+    ox.clearRect(0, 0, W, W);
+    const pr = 55 + Math.sin(t * 1.4) * 5;
+    // outer glow
+    const g = ox.createRadialGradient(CX, CY, 0, CX, CY, pr * 2.8);
+    g.addColorStop(0, 'rgba(0,240,255,0.9)');
+    g.addColorStop(0.2, 'rgba(0,180,255,0.6)');
+    g.addColorStop(0.5, 'rgba(0,80,160,0.25)');
+    g.addColorStop(0.8, 'rgba(255,0,160,0.08)');
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ox.fillStyle = g;
+    ox.beginPath(); ox.arc(CX, CY, pr * 2.8, 0, Math.PI * 2); ox.fill();
+    // core
+    const g2 = ox.createRadialGradient(CX - pr * .2, CY - pr * .2, 0, CX, CY, pr);
+    g2.addColorStop(0, 'rgba(255,255,255,0.95)');
+    g2.addColorStop(0.3, 'rgba(160,240,255,0.9)');
+    g2.addColorStop(0.7, 'rgba(0,120,220,0.7)');
+    g2.addColorStop(1, 'rgba(0,40,100,0.4)');
+    ox.fillStyle = g2;
+    ox.beginPath(); ox.arc(CX, CY, pr, 0, Math.PI * 2); ox.fill();
+    // inner highlight
+    ox.fillStyle = 'rgba(255,255,255,0.35)';
+    ox.beginPath(); ox.arc(CX - pr * .28, CY - pr * .28, pr * .22, 0, Math.PI * 2); ox.fill();
+    // label
+    ox.fillStyle = `rgba(0,240,255,${0.7 + Math.sin(t * 2) * 0.15})`;
+    ox.font = 'bold 14px "Courier New"';
+    ox.textAlign = 'center'; ox.textBaseline = 'middle';
+    ox.shadowColor = 'rgba(0,240,255,0.8)'; ox.shadowBlur = 12;
+    ox.fillText('JARVIS', CX, CY);
+    ox.shadowBlur = 0;
+  }
+
+  function drawRings() {
+    rx.clearRect(0, 0, RW, RW);
+    // Ring 1 — cyan
+    rx.save(); rx.translate(RCX, RCY);
+    rx.rotate(t * 0.4);
+    rx.strokeStyle = 'rgba(0,240,255,0.5)'; rx.lineWidth = 1.2;
+    rx.beginPath(); rx.ellipse(0, 0, 110, 30, 0, 0, Math.PI * 2); rx.stroke();
+    rx.restore();
+    // Ring 2 — magenta
+    rx.save(); rx.translate(RCX, RCY);
+    rx.rotate(-t * 0.3 + 1.2);
+    rx.strokeStyle = 'rgba(255,0,160,0.35)'; rx.lineWidth = 1;
+    rx.beginPath(); rx.ellipse(0, 0, 95, 22, 0.5, 0, Math.PI * 2); rx.stroke();
+    rx.restore();
+    // Ring 3 — amber
+    rx.save(); rx.translate(RCX, RCY);
+    rx.rotate(t * 0.2 + 0.8);
+    rx.strokeStyle = 'rgba(255,176,0,0.25)'; rx.lineWidth = 0.8;
+    rx.beginPath(); rx.ellipse(0, 0, 120, 18, -0.4, 0, Math.PI * 2); rx.stroke();
+    rx.restore();
+    // Orbit dots
+    [[110, 30, 0, t * 0.4, '#00f0ff'],
+     [95, 22, 0.5, -t * 0.3 + 1.2, '#ff00a0'],
+     [120, 18, -0.4, t * 0.2 + 0.8, '#ffb000']].forEach(([a, b, tilt, angle, col]) => {
+      const x = Math.cos(angle) * a, y = Math.sin(angle) * b * Math.cos(tilt);
+      rx.fillStyle = col; rx.shadowColor = col; rx.shadowBlur = 10;
+      rx.beginPath(); rx.arc(RCX + x, RCY + y, 4, 0, Math.PI * 2); rx.fill();
+      rx.shadowBlur = 0;
+    });
+    // Outer hex ring
+    rx.strokeStyle = 'rgba(0,240,255,0.12)'; rx.lineWidth = 0.8;
+    rx.beginPath(); rx.arc(RCX, RCY, 125, 0, Math.PI * 2); rx.stroke();
+    // Tick marks
+    for (let i = 0; i < 36; i++) {
+      const a = (Math.PI * 2 / 36) * i;
+      const r1 = 125, r2 = i % 3 === 0 ? 115 : 120;
+      rx.strokeStyle = i % 3 === 0 ? 'rgba(0,240,255,0.5)' : 'rgba(0,240,255,0.2)';
+      rx.lineWidth = i % 3 === 0 ? 1.2 : 0.6;
+      rx.beginPath();
+      rx.moveTo(RCX + r1 * Math.cos(a), RCY + r1 * Math.sin(a));
+      rx.lineTo(RCX + r2 * Math.cos(a), RCY + r2 * Math.sin(a));
+      rx.stroke();
+    }
+  }
+
+  function loop() {
+    drawOrb(); drawRings();
+    t += 0.016; requestAnimationFrame(loop);
+  }
+  loop();
+})();
+
+// ── Clock ──────────────────────────────────────────────
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.toTimeString().slice(0, 8);
+}
+setInterval(updateClock, 1000); updateClock();
+
+// ── LLM Panel ──────────────────────────────────────────
+const LLMS = [
+  {name:'GPT-4o',     tag:'OPENAI',    port:null, key:'openai'},
+  {name:'Claude-3.7', tag:'ANTHROPIC', port:null, key:'claude'},
+  {name:'Gemini-2.0', tag:'GOOGLE',    port:null, key:'gemini'},
+  {name:'Local-7B',   tag:'llama.cpp', port:1234, key:'local7b'},
+  {name:'Local-13B',  tag:'llama.cpp', port:1235, key:'local13b'},
+  {name:'Mistral',    tag:'OPENROUTER',port:null, key:'mistral'},
+];
+function buildLLMList() {
+  const el = document.getElementById('llmList');
+  el.innerHTML = '';
+  LLMS.forEach((m, i) => {
+    const row = document.createElement('div');
+    row.className = 'llm-row'; row.id = 'llm-' + m.key;
+    row.innerHTML = `
+      <span class="status-dot dot-warn" id="dot-${m.key}"></span>
+      <span class="llm-name">${m.name}</span>
+      <span class="llm-load" id="load-${m.key}">—</span>
+      <span class="llm-badge badge-warn" id="badge-${m.key}">CHECK</span>`;
+    row.onclick = () => setLLM(m.key, m.name);
+    el.appendChild(row);
+  });
+}
+buildLLMList();
+
+function setLLM(key, name) {
+  document.querySelectorAll('.llm-row').forEach(r => r.style.background = '');
+  document.getElementById('llm-' + key).style.background = 'rgba(0,240,255,0.08)';
+  jarvisSpeak(`${name} selected as primary model.`);
+}
+
+async function checkLLMs() {
+  if (!apiOnline) return;
+  try {
+    const r = await fetch(API + '/api/llm-status', {signal: AbortSignal.timeout(2000)});
+    if (!r.ok) return;
+    const d = await r.json();
+    Object.entries(d).forEach(([key, info]) => {
+      const dot = document.getElementById('dot-' + key);
+      const badge = document.getElementById('badge-' + key);
+      const load = document.getElementById('load-' + key);
+      if (!dot) return;
+      if (info.online) {
+        dot.className = 'status-dot dot-on';
+        badge.className = 'llm-badge badge-on'; badge.textContent = 'ONLINE';
+      } else {
+        dot.className = 'status-dot dot-off';
+        badge.className = 'llm-badge badge-off'; badge.textContent = 'OFFLINE';
+      }
+      if (load && info.load) load.textContent = info.load;
+    });
+  } catch (e) {}
+}
+
+// ── Voice setup ────────────────────────────────────────
+function loadVoices() {
+  voices = synth.getVoices();
+  const sel = document.getElementById('voiceSel');
+  sel.innerHTML = '';
+  voices.forEach((v, i) => {
+    const op = document.createElement('option');
+    op.value = i; op.textContent = v.name.slice(0, 28);
+    sel.appendChild(op);
+  });
+  // pick a deep/male voice if available
+  const pref = ['Google UK English Male','Microsoft David','Daniel','en-GB'];
+  for (let p of pref) {
+    const idx = voices.findIndex(v => v.name.includes(p) || v.lang.startsWith(p));
+    if (idx >= 0) { sel.value = idx; selectedVoiceIdx = idx; break; }
+  }
+}
+synth.onvoiceschanged = loadVoices; loadVoices();
+document.getElementById('voiceSel').onchange = e => { selectedVoiceIdx = parseInt(e.target.value); };
+
+function jarvisSpeak(text) {
+  synth.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  if (voices[selectedVoiceIdx]) u.voice = voices[selectedVoiceIdx];
+  u.rate = 0.92; u.pitch = 0.88; u.volume = 1;
+  synth.speak(u);
+  document.getElementById('voiceText').textContent = text.toUpperCase().slice(0, 80);
+}
+
+// ── Speech recognition ─────────────────────────────────
+function initRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    document.getElementById('voiceStatus').textContent = 'VOICE: NOT SUPPORTED';
+    return null;
+  }
+  const r = new SR();
+  r.continuous = false; r.lang = 'en-AU'; r.interimResults = true;
+  r.onresult = e => {
+    let final = '', interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    document.getElementById('voiceText').textContent =
+      (final || interim).toUpperCase();
+    if (final) processCommand(final.trim().toLowerCase());
+  };
+  r.onstart = () => {
+    document.getElementById('voiceStatus').textContent = '◉ LISTENING…';
+    document.getElementById('talkBtn').classList.add('listening');
+    document.getElementById('waveCanvas').classList.add('visible');
+    startWave();
+  };
+  r.onend = () => {
+    listeningActive = false;
+    document.getElementById('talkBtn').classList.remove('listening');
+    document.getElementById('talkBtn').textContent = '◉ TALK TO JARVIS';
+    document.getElementById('voiceStatus').textContent = 'PUSH TO TALK';
+    document.getElementById('waveCanvas').classList.remove('visible');
+  };
+  r.onerror = e => {
+    if (e.error !== 'no-speech')
+      document.getElementById('voiceStatus').textContent = 'ERR: ' + e.error.toUpperCase();
+  };
+  return r;
+}
+
+function toggleVoice() {
+  if (!recognition) recognition = initRecognition();
+  if (!recognition) return;
+  if (listeningActive) {
+    recognition.stop(); listeningActive = false;
+  } else {
+    try { recognition.start(); listeningActive = true; } catch (e) {}
+    document.getElementById('talkBtn').textContent = '◉ STOP';
+  }
+}
+
+// ── Waveform animation ─────────────────────────────────
+let waveAF = null;
+function startWave() {
+  const c = document.getElementById('waveCanvas');
+  const x = c.getContext('2d');
+  let t = 0;
+  function loop() {
+    x.clearRect(0, 0, c.width, c.height);
+    x.strokeStyle = listeningActive ? '#ff00a0' : '#00f0ff';
+    x.lineWidth = 2; x.beginPath();
+    for (let i = 0; i < c.width; i++) {
+      const y = c.height / 2 + Math.sin(i * 0.08 + t) * 12 * (listeningActive ? 1.5 : 0.5)
+              + Math.sin(i * 0.14 + t * 1.3) * 6;
+      i === 0 ? x.moveTo(i, y) : x.lineTo(i, y);
+    }
+    x.stroke();
+    t += 0.08;
+    waveAF = requestAnimationFrame(loop);
+  }
+  if (waveAF) cancelAnimationFrame(waveAF);
+  loop();
+}
+
+// ── Command parser ─────────────────────────────────────
+const RESPONSES = {
+  'status':     () => buildStatusResponse(),
+  'sift status':() => buildStatusResponse(),
+  'feed':       () => buildFeedResponse(),
+  'live feed':  () => buildFeedResponse(),
+  'combos':     () => `Total combos extracted: ${document.getElementById('totalCombos').textContent}`,
+  'how many combos': () => `I have extracted ${document.getElementById('totalCombos').textContent} credential pairs.`,
+  'hits':       () => `Total TG hits: ${document.getElementById('totalHits').textContent}`,
+  'agents':     () => buildAgentResponse(),
+  'help':       () => HELP_TEXT,
+};
+const HELP_TEXT = 'Commands: status, feed, combos, hits, agents, run sift, stop sift, open tg, clear feed, voice test, help.';
+const STARTS = [
+  ['run sift',   () => sendCommand('sift','start')],
+  ['stop sift',  () => sendCommand('sift','stop')],
+  ['start sift', () => sendCommand('sift','start')],
+  ['open tg',    () => sendCommand('tg','start')],
+  ['stop tg',    () => sendCommand('tg','stop')],
+  ['clear feed', () => { feedEvents=[]; renderFeed(); return 'Feed cleared.'; }],
+  ['voice test', () => { jarvisSpeak('BM23 command centre online. All systems nominal.'); return null; }],
+  ['hello',      () => 'Good day. BM23 command centre is fully operational.'],
+  ['hi jarvis',  () => 'Hello. Neural arrays are active. How can I assist?'],
+  ['who are you',() => 'I am JARVIS, the BM23 integrated command intelligence.'],
+];
+
+function processCommand(cmd) {
+  // exact match
+  if (RESPONSES[cmd]) { showResponse(RESPONSES[cmd]()); return; }
+  // starts-with match
+  for (let [prefix, fn] of STARTS) {
+    if (cmd.startsWith(prefix)) { const r = fn(); if (r) showResponse(r); return; }
+  }
+  // fuzzy keyword
+  if (cmd.includes('combo')) { showResponse(RESPONSES['combos']()); return; }
+  if (cmd.includes('hit'))   { showResponse(RESPONSES['hits']()); return; }
+  if (cmd.includes('status'))  { showResponse(buildStatusResponse()); return; }
+  if (cmd.includes('feed'))    { showResponse(buildFeedResponse()); return; }
+  // fallback
+  showResponse(`Command recognised: "${cmd.slice(0,40)}". Type HELP for command list.`);
+}
+
+function buildStatusResponse() {
+  return `SIFT: ${document.getElementById('sift-status').textContent}
+TG-INGEST: ${document.getElementById('tg-status').textContent}
+COMBOS: ${document.getElementById('totalCombos').textContent}
+HITS: ${document.getElementById('totalHits').textContent}
+API SERVER: ${apiOnline ? 'ONLINE' : 'OFFLINE'}`;
+}
+function buildFeedResponse() {
+  if (!feedEvents.length) return 'Live feed is empty.';
+  return feedEvents.slice(-5).reverse().map(e =>
+    `${e.time} · ${e.file || e.text}`).join('\n');
+}
+function buildAgentResponse() {
+  return `SIFT · ${document.getElementById('sift-metric').textContent}
+TG-INGEST · ${document.getElementById('tg-metric').textContent}
+LOCAL-AI · ${document.getElementById('local-metric').textContent}
+HERMES · ${document.getElementById('hermes-metric').textContent}`;
+}
+
+function showResponse(text) {
+  if (!text) return;
+  const box = document.getElementById('responseBox');
+  document.getElementById('responseContent').textContent = text;
+  box.classList.add('show');
+  jarvisSpeak(text.slice(0, 120).replace(/[\n:]/g, ' '));
+  setTimeout(() => box.classList.remove('show'), 8000);
+}
+document.getElementById('responseClose').onclick = () =>
+  document.getElementById('responseBox').classList.remove('show');
+
+// ── API server comm ────────────────────────────────────
+async function checkApi() {
+  try {
+    const r = await fetch(API + '/api/ping', {signal: AbortSignal.timeout(1500)});
+    if (r.ok) {
+      if (!apiOnline) {
+        apiOnline = true;
+        document.getElementById('apiStatus').textContent = 'ONLINE';
+        document.getElementById('apiStatus').style.color = 'var(--grn)';
+        document.getElementById('apDot').className = 'status-dot dot-on';
+        addFeedItem({text:'API server connected', type:'hit', time:nowStr()});
+      }
+    } else throw new Error();
+  } catch {
+    if (apiOnline) {
+      apiOnline = false;
+      document.getElementById('apiStatus').textContent = 'OFFLINE';
+      document.getElementById('apiStatus').style.color = 'var(--red)';
+      document.getElementById('apDot').className = 'status-dot dot-off';
+    }
+  }
+}
+
+async function pollEvents() {
+  if (!apiOnline) return;
+  try {
+    const r = await fetch(API + '/api/events?limit=50', {signal: AbortSignal.timeout(3000)});
+    if (!r.ok) return;
+    const d = await r.json();
+    let newCount = 0;
+    (d.events || []).forEach(ev => {
+      if (!feedEvents.find(e => e.id === ev.id)) {
+        feedEvents.push({
+          id: ev.id,
+          text: ev.file_name || '?',
+          file: ev.file_name,
+          combos: ev.combo_count || 0,
+          chat: ev.chat_name || '?',
+          time: ev.ts ? new Date(ev.ts * 1000).toTimeString().slice(0,8) : '?',
+          type: ev.combo_count > 0 ? 'hit' : 'warn'
+        });
+        newCount++;
+      }
+    });
+    if (newCount) { renderFeed(); updateCounts(d); }
+    if (d.sift) updateAgentCard('sift', d.sift);
+    if (d.tg) updateAgentCard('tg', d.tg);
+  } catch {}
+}
+
+async function sendCommand(agent, action) {
+  if (!apiOnline) { showResponse(`API server offline. Cannot ${action} ${agent}.`); return; }
+  try {
+    const r = await fetch(API + '/api/command', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({agent, action}),
+      signal: AbortSignal.timeout(3000)
+    });
+    const d = await r.json();
+    showResponse(d.message || `${agent} ${action} sent.`);
+  } catch { showResponse(`Failed to send command to ${agent}.`); }
+}
+
+function updateCounts(d) {
+  if (d.total_combos !== undefined)
+    document.getElementById('totalCombos').textContent = d.total_combos.toLocaleString();
+  if (d.total_hits !== undefined)
+    document.getElementById('totalHits').textContent = d.total_hits.toLocaleString();
+  if (d.queued !== undefined)
+    document.getElementById('queuedCount').textContent = d.queued;
+  document.getElementById('feedCount').textContent = feedEvents.length + ' EVENTS';
+}
+function updateAgentCard(key, info) {
+  const card = document.getElementById('card-' + key);
+  if (!card) return;
+  if (info.running) { card.className = 'agent-card active'; }
+  else { card.className = 'agent-card'; }
+  const st = document.getElementById(key + '-status');
+  const mt = document.getElementById(key + '-metric');
+  if (st && info.status) st.textContent = info.status.toUpperCase().slice(0,20);
+  if (mt && info.metric) mt.textContent = info.metric;
+}
+
+// ── Feed render ────────────────────────────────────────
+function addFeedItem(ev) {
+  feedEvents.push(ev);
+  if (feedEvents.length > 200) feedEvents.shift();
+  renderFeed();
+}
+function renderFeed() {
+  const el = document.getElementById('liveFeed');
+  const items = feedEvents.slice(-40).reverse();
+  el.innerHTML = items.map(ev => `
+    <div class="feed-item ${ev.type || ''}">
+      <span class="feed-ts">${ev.time || ''}</span>
+      ${ev.combos ? `<span class="feed-count">+${ev.combos}</span>` : ''}
+      <div class="feed-text">${(ev.chat ? ev.chat.slice(0,14) + '·' : '')}${(ev.text||'').slice(0,40)}</div>
+    </div>`).join('');
+  document.getElementById('feedCount').textContent = feedEvents.length + ' EVENTS';
+}
+function nowStr() { return new Date().toTimeString().slice(0,8); }
+
+// ── Startup messages ───────────────────────────────────
+function startup() {
+  const msgs = [
+    {text:'BM23 COMMAND CENTRE INITIALISED', type:'hit', time:nowStr()},
+    {text:'Neural arrays: ACTIVE', type:'', time:nowStr()},
+    {text:'Voice synthesis: ' + (synth ? 'READY' : 'UNAVAILABLE'), type:'', time:nowStr()},
+    {text:'Speech recognition: ' + ((window.SpeechRecognition || window.webkitSpeechRecognition) ? 'READY' : 'UNAVAILABLE'), type:'', time:nowStr()},
+    {text:'Polling local API on :5521', type:'warn', time:nowStr()},
+  ];
+  msgs.forEach((m, i) => setTimeout(() => addFeedItem(m), i * 300));
+  setTimeout(() => jarvisSpeak('BM23 command centre online. All systems nominal.'), 1200);
+}
+
+// ── Polling loop ───────────────────────────────────────
+setInterval(checkApi, 3000);
+setInterval(pollEvents, 4000);
+setInterval(checkLLMs, 10000);
+checkApi();
+
+// ── Voice bar idle animation ───────────────────────────
+const bars = document.getElementById('voiceBar').querySelectorAll('span');
+setInterval(() => {
+  bars.forEach(b => {
+    const h = listeningActive
+      ? (4 + Math.random() * 20) + 'px'
+      : (3 + Math.sin(Date.now() * 0.003 + Math.random() * 3) * 5 + 5) + 'px';
+    b.style.height = h;
+  });
+}, 80);
+
+// ── Agent card clicks ──────────────────────────────────
+document.getElementById('card-sift').onclick = () =>
+  showResponse('SIFT: Email processor · Processes credential lists · ' + document.getElementById('sift-metric').textContent);
+document.getElementById('card-tg').onclick = () =>
+  showResponse('TG-INGEST: Polls Telegram Files tab · Extracts email:pass combos · Run: python bm23_tg_ingest.py run');
+document.getElementById('card-hermes').onclick = () =>
+  showResponse('HERMES: Session handoff engine · Carries context between SIFT runs');
+document.getElementById('card-local').onclick = () =>
+  showResponse('LOCAL-AI: llama.cpp runtime · Standalone, no Lemonade/Unsloth dependency · Port 1234/1235');
+document.getElementById('card-forge').onclick = () =>
+  showResponse('GUI-FORGE: Interface builder for BM23-TOOLZ plugins and panels');
+document.getElementById('card-sys').onclick = () =>
+  showResponse('HOST MACHINE · Local inference available · No cloud dependency required');
+
+// ── Boot ───────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', startup);
+</script>
+
+<!-- ══════════════════════════════════════════════════════
+     API SERVER: bm23_api_server.py  (run alongside this)
+     python bm23_api_server.py
+     Serves live events from ~/.email_archive/tg_ingest.db
+     ══════════════════════════════════════════════════════ -->
+</body>
+</html>
